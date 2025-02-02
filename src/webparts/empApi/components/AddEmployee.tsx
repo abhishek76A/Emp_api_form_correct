@@ -22,7 +22,13 @@ interface IAddEmployeeState {
   errorMessage: string;
   modifiedByEmail: string;
   createdByEmail: string;
-
+  department: string;
+  designation: string;
+  contactInfo: string;
+  address: string;
+  dateOfJoining: string;
+  assignedUsers: string;
+  supportingDocument: File | null; // New field for file upload
 }
 
 export default class AddEmployee extends React.Component<IAddEmployeeProps, IAddEmployeeState> {
@@ -41,7 +47,14 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
       active: "true",
       errorMessage: "",
       modifiedByEmail: "",
-      createdByEmail: ""
+      createdByEmail: "",
+      department: "",
+      designation: "",
+      contactInfo: "",
+      address: "",
+      dateOfJoining: new Date().toISOString(),
+      assignedUsers: "",
+      supportingDocument: null, // Initialize with null
     };
 
     // Corrected: Move peoplePickerContext inside the constructor
@@ -53,34 +66,47 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
   }
 
   handleChange = (field: keyof IAddEmployeeState, value: string) => {
-    this.setState({ [field]: value } as Pick<IAddEmployeeState, keyof IAddEmployeeState>);
+    this.setState({ [field]: value } as unknown as Pick<IAddEmployeeState, keyof IAddEmployeeState>);
+  };
+
+  handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files ? event.target.files[0] : null;
+    this.setState({ supportingDocument: file });
   };
 
   handleAddEmployee = async () => {
-    const { employeeName, salary, createdBy, modifiedBy, flag, active } = this.state;
+    const { employeeName, salary, createdBy, modifiedBy, flag, active, department, designation, contactInfo, address, dateOfJoining, assignedUsers, supportingDocument } = this.state;
 
-    // Ensure createdBy and modifiedBy are strings before trimming
-    if (!employeeName || !salary || !createdBy || !modifiedBy || !flag || !active) {
+    if (!employeeName || !salary || !createdBy || !modifiedBy || !flag || !active || !department || !designation || !contactInfo || !address || !dateOfJoining || !assignedUsers) {
       this.setState({ errorMessage: "Please fill in all fields and select users for 'Created By' and 'Modified By'." });
       return;
     }
 
-    const employeeData = {
-      id: 0,
-      name: employeeName,
-      salary: parseFloat(salary),
-      created_by: this.state.createdByEmail,  // Ensure this is a string
-      created_ts: this.state.createdTs,
-      modified_by: this.state.modifiedByEmail,  // Ensure this is a string
-      modified_ts: this.state.modifiedTs,
-      flag: flag,
-      active: active,
-    };
+    const formData = new FormData();
+    formData.append("name", employeeName);
+    formData.append("salary", salary);
+    formData.append("created_by", this.state.createdByEmail);
+    formData.append("created_ts", this.state.createdTs);
+    formData.append("modified_by", this.state.modifiedByEmail);
+    formData.append("modified_ts", this.state.modifiedTs);
+    formData.append("flag", flag);
+    formData.append("active", active);
+    formData.append("department", department);
+    formData.append("designation", designation);
+    formData.append("contactInfo", contactInfo);
+    formData.append("address", address);
+    formData.append("dateOfJoining", dateOfJoining);
+    formData.append("assignedUsers", assignedUsers);
 
-    console.log("Sending Employee Data:", employeeData);
+    if (supportingDocument) {
+      formData.append("supportingDocument", supportingDocument); // Append the file
+    }
+
+    console.log("Sending Employee Data:", formData);
+
     try {
-      const response = await axios.post(apiUrl, employeeData, {
-        headers: { "Content-Type": "application/json" },
+      const response = await axios.post(apiUrl, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
       console.log("Employee added successfully:", response.data);
@@ -95,6 +121,13 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
         active: "true",
         createdTs: new Date().toISOString(),
         modifiedTs: new Date().toISOString(),
+        department: "",
+        designation: "",
+        contactInfo: "",
+        address: "",
+        dateOfJoining: new Date().toISOString(),
+        assignedUsers: "",
+        supportingDocument: null,
         errorMessage: ""
       });
 
@@ -106,15 +139,13 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
 
   handlePeoplePickerChange = (field: keyof IAddEmployeeState, items: any[]) => {
     console.log(items);
-    // Ensure that we're extracting a string (user ID or display name)
-    const selectedUser = items.length > 0 ? items[0].id : "";  // Extract the user ID (string) from the PeoplePicker result
+    const selectedUser = items.length > 0 ? items[0].id : "";  
     this.setState({ [field]: selectedUser } as Pick<IAddEmployeeState, keyof IAddEmployeeState>);
-    this.setState({modifiedByEmail : items[0].secondaryText});
-    this.setState({createdByEmail : items[0].secondaryText});
+    this.setState({ modifiedByEmail: items[0].secondaryText, createdByEmail: items[0].secondaryText });
   };
 
   render() {
-    const { employeeName, salary, errorMessage } = this.state;
+    const { employeeName, salary, errorMessage, supportingDocument } = this.state;
 
     return (
       <Stack tokens={{ childrenGap: 10 }} style={{ maxWidth: 400, margin: "auto" }}>
@@ -122,11 +153,15 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
 
         {errorMessage && <MessageBar messageBarType={MessageBarType.error}>{errorMessage}</MessageBar>}
 
-        <TextField label="Name" value={employeeName}
-          onChange={(e, val) => this.handleChange("employeeName", val || "")} />
+        <TextField label="Name" value={employeeName} onChange={(e, val) => this.handleChange("employeeName", val || "")} />
+        <TextField label="Salary" type="number" value={salary} onChange={(e, val) => this.handleChange("salary", val || "")} />
+        <TextField label="Department" value={this.state.department} onChange={(e, val) => this.handleChange("department", val || "")} />
+        <TextField label="Designation" value={this.state.designation} onChange={(e, val) => this.handleChange("designation", val || "")} />
+        <TextField label="Contact Info" value={this.state.contactInfo} onChange={(e, val) => this.handleChange("contactInfo", val || "")} />
+        <TextField label="Address" value={this.state.address} onChange={(e, val) => this.handleChange("address", val || "")} />
+        <TextField label="Date of Joining" type="date" value={this.state.dateOfJoining} onChange={(e, val) => this.handleChange("dateOfJoining", val || "")} />
+        <TextField label="Assigned Users" value={this.state.assignedUsers} onChange={(e, val) => this.handleChange("assignedUsers", val || "")} />
 
-        <TextField label="Salary" type="number" value={salary}
-          onChange={(e, val) => this.handleChange("salary", val || "")} />
 
         {/* People Picker for Created By */}
         <PeoplePicker
@@ -158,12 +193,12 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
           principalTypes={[PrincipalType.User]}
           resolveDelay={1000}
         />
-
-        <TextField label="Flag" value={this.state.flag}
-          onChange={(e, val) => this.handleChange("flag", val || "")} />
-
-        <TextField label="Active" value={this.state.active}
-          onChange={(e, val) => this.handleChange("active", val || "")} />
+        <TextField label="Flag" value={this.state.flag} onChange={(e, val) => this.handleChange("flag", val || "")} />
+        <TextField label="Active" value={this.state.active} onChange={(e, val) => this.handleChange("active", val || "")} />
+                  {/* Supporting Document Upload */}
+         <label>Supporting Document:</label>
+        <input type="file" accept=".pdf,.doc,.docx,.jpg,.png" onChange={this.handleFileChange} />
+        {supportingDocument && <p>Selected File: {supportingDocument.name}</p>}
 
         <PrimaryButton onClick={this.handleAddEmployee} text="Add Employee" />
       </Stack>
