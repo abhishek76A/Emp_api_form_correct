@@ -3,6 +3,11 @@ import { Stack, PrimaryButton, MessageBar, MessageBarType, TextField } from "off
 import { PeoplePicker, PrincipalType } from "@pnp/spfx-controls-react/lib/PeoplePicker";
 import axios from "axios";
 import { WebPartContext } from '@microsoft/sp-webpart-base';
+import { spfi } from "@pnp/sp";  // Import PnP for SharePoint interaction
+import { SPFx } from "@pnp/sp";   // Import SPFx context for PnP JS
+import "@pnp/sp/webs";           // Import PnP JS for SharePoint webs
+import "@pnp/sp/folders";        // Import PnP JS for SharePoint folders
+import "@pnp/sp/files";          // Import PnP JS for SharePoint files
 
 const apiUrl = "https://localhost:7042/api/Employees/add"; // API endpoint
 
@@ -28,11 +33,12 @@ interface IAddEmployeeState {
   address: string;
   dateOfJoining: string;
   assignedUsers: string;
-  supportingDocument: File | null; // New field for file upload
+  Document_Link: File | null; // New field for file upload
 }
 
 export default class AddEmployee extends React.Component<IAddEmployeeProps, IAddEmployeeState> {
   [x: string]: any;
+  private sp = spfi().using(SPFx(this.props.context)); // Initialize PnP JS with SPFx context
 
   constructor(props: IAddEmployeeProps) {
     super(props);
@@ -54,10 +60,9 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
       address: "",
       dateOfJoining: new Date().toISOString(),
       assignedUsers: "",
-      supportingDocument: null, // Initialize with null
+      Document_Link: null, // Initialize with null
     };
 
-    // Corrected: Move peoplePickerContext inside the constructor
     this.peoplePickerContext = {
       absoluteUrl: this.props.context.pageContext.web.absoluteUrl,
       msGraphClientFactory: this.props.context.msGraphClientFactory,
@@ -71,47 +76,72 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
 
   handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files ? event.target.files[0] : null;
-    this.setState({ supportingDocument: file });
+    this.setState({ Document_Link: file });
+  };
+
+  // Function to upload file to SharePoint document library
+  uploadFile = async (): Promise <string | null> => {
+    const {Document_Link}=this.state
+    const targetLibraryUrl = "supported_document"; // Replace with your SharePoint document library URL
+    // const {file}=this.state
+    if (Document_Link) {
+      try {
+        // Upload the file to the SharePoint folder
+        const response = await this.sp.web.getFolderByServerRelativePath(targetLibraryUrl).files.addUsingPath(Document_Link.name, Document_Link, { Overwrite: true });
+        console.log("File uploaded successfully to SharePoint!");
+        return response.ServerRelativeUrl; // Return the uploaded file's URL
+      } catch (error) {
+        console.error("Error uploading file to SharePoint:", error);
+        return null;
+      }
+    }
+    return null
   };
 
   handleAddEmployee = async () => {
-    const { employeeName, salary, createdBy, modifiedBy, flag, active, department, designation, contactInfo, address, dateOfJoining, assignedUsers, supportingDocument } = this.state;
+    const { employeeName, salary, createdBy, modifiedBy, flag, active, department, designation, contactInfo, address, dateOfJoining, assignedUsers } = this.state;
 
     if (!employeeName || !salary || !createdBy || !modifiedBy || !flag || !active || !department || !designation || !contactInfo || !address || !dateOfJoining || !assignedUsers) {
       this.setState({ errorMessage: "Please fill in all fields and select users for 'Created By' and 'Modified By'." });
       return;
     }
 
-    const formData = new FormData();
-    formData.append("name", employeeName);
-    formData.append("salary", salary);
-    formData.append("created_by", this.state.createdByEmail);
-    formData.append("created_ts", this.state.createdTs);
-    formData.append("modified_by", this.state.modifiedByEmail);
-    formData.append("modified_ts", this.state.modifiedTs);
-    formData.append("flag", flag);
-    formData.append("active", active);
-    formData.append("department", department);
-    formData.append("designation", designation);
-    formData.append("contactInfo", contactInfo);
-    formData.append("address", address);
-    formData.append("dateOfJoining", dateOfJoining);
-    formData.append("assignedUsers", assignedUsers);
+    // Upload file to SharePoint (without storing the link in the database)
+   
+      const doclink=await this.uploadFile();
+      if(!doclink){
+        this.setState({errorMessage:"Failed to upload file to SharePoint"});
+        return;
+      }
 
-    if (supportingDocument) {
-      formData.append("supportingDocument", supportingDocument); // Append the file
-    }
-
-    console.log("Sending Employee Data:", formData);
+    const employeeData = {
+      employeeName,
+      salary,
+      createdBy: this.state.createdByEmail,
+      createdTs: this.state.createdTs,
+      modifiedBy: this.state.modifiedByEmail,
+      modifiedTs: this.state.modifiedTs,
+      flag,
+      active,
+      department,
+      designation,
+      contactInfo,
+      address,
+      dateOfJoining,
+      assignedUsers,
+      Document_Link:doclink
+      // Do not include documentLink in the request if you don't want to store it in the database
+    };
 
     try {
-      const response = await axios.post(apiUrl, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+      const response = await axios.post(apiUrl, employeeData, {
+        headers: { "Content-Type": "application/json" },
       });
 
       console.log("Employee added successfully:", response.data);
       alert("Employee added successfully!");
 
+      // Reset the form after submission
       this.setState({
         employeeName: "",
         salary: "",
@@ -127,8 +157,9 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
         address: "",
         dateOfJoining: new Date().toISOString(),
         assignedUsers: "",
-        supportingDocument: null,
-        errorMessage: ""
+        Document_Link: null,
+        errorMessage: "",
+        
       });
 
     } catch (error) {
@@ -138,14 +169,13 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
   };
 
   handlePeoplePickerChange = (field: keyof IAddEmployeeState, items: any[]) => {
-    console.log(items);
     const selectedUser = items.length > 0 ? items[0].id : "";  
     this.setState({ [field]: selectedUser } as Pick<IAddEmployeeState, keyof IAddEmployeeState>);
     this.setState({ modifiedByEmail: items[0].secondaryText, createdByEmail: items[0].secondaryText });
   };
 
   render() {
-    const { employeeName, salary, errorMessage, supportingDocument } = this.state;
+    const { employeeName, salary, errorMessage, Document_Link } = this.state;
 
     return (
       <Stack tokens={{ childrenGap: 10 }} style={{ maxWidth: 400, margin: "auto" }}>
@@ -161,7 +191,6 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
         <TextField label="Address" value={this.state.address} onChange={(e, val) => this.handleChange("address", val || "")} />
         <TextField label="Date of Joining" type="date" value={this.state.dateOfJoining} onChange={(e, val) => this.handleChange("dateOfJoining", val || "")} />
         <TextField label="Assigned Users" value={this.state.assignedUsers} onChange={(e, val) => this.handleChange("assignedUsers", val || "")} />
-
 
         {/* People Picker for Created By */}
         <PeoplePicker
@@ -193,12 +222,14 @@ export default class AddEmployee extends React.Component<IAddEmployeeProps, IAdd
           principalTypes={[PrincipalType.User]}
           resolveDelay={1000}
         />
+
         <TextField label="Flag" value={this.state.flag} onChange={(e, val) => this.handleChange("flag", val || "")} />
         <TextField label="Active" value={this.state.active} onChange={(e, val) => this.handleChange("active", val || "")} />
-                  {/* Supporting Document Upload */}
-         <label>Supporting Document:</label>
+        
+        {/* Supporting Document Upload */}
+        <label>Supporting Document:</label>
         <input type="file" accept=".pdf,.doc,.docx,.jpg,.png" onChange={this.handleFileChange} />
-        {supportingDocument && <p>Selected File: {supportingDocument.name}</p>}
+        {Document_Link && <p>Selected File: {Document_Link.name}</p>}
 
         <PrimaryButton onClick={this.handleAddEmployee} text="Add Employee" />
       </Stack>
