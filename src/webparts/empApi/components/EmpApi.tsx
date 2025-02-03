@@ -1,7 +1,6 @@
 import * as React from "react";
 import AddEmployee from "./AddEmployee";
 import FetchEmployeeById from "./FetchEmployeeById";
-import DeleteEmployee from "./DeleteEmployee";
 import EmployeeList from "./EmployeeList";
 import { IEmpApiProps } from "./IEmpApiProps";
 
@@ -48,7 +47,6 @@ const EmpApi: React.FC<IEmpApiProps> = (props) => {
         {currentView === "add" && <AddEmployee context={context} />}
         {currentView === "view" && <EmployeeList />}
         {currentView === "id" && <FetchEmployeeById updateEmployeeData={updateEmployeeData} />}
-        {currentView === "delete" && <DeleteEmployee />}
       </div>
     </div>
   );
